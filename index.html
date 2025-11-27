@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>원의 넓이와 원주율 시각화 학습</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&display=swap');
+        
+        body {
+            font-family: 'Nanum Gothic', sans-serif;
+            touch-action: none; 
+            overscroll-behavior: none; /* 맥/모바일 스와이프 바운스 방지 */
+        }
+
+        /* 탭 버튼 스타일 */
+        .tab-btn {
+            transition: all 0.2s;
+            border-bottom: 4px solid transparent;
+        }
+        .tab-btn.active {
+            border-bottom-color: #3b82f6; /* blue-500 */
+            color: #1d4ed8; /* blue-700 */
+            background-color: #eff6ff; /* blue-50 */
+        }
+        
+        /* 캔버스 커서 */
+        .drag-cursor { cursor: grab; }
+        .drag-cursor:active { cursor: grabbing; }
+
+        /* 슬라이더 스타일 */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+
+        /* 말풍선 스타일 */
+        .bubble {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 5px 10px;
+            border-radius: 10px;
+            border: 2px solid #3b82f6;
+            font-weight: bold;
+            color: #1e3a8a;
+            pointer-events: none;
+            font-size: 0.9rem;
+            transform: translate(-50%, -100%);
+            white-space: nowrap;
+            z-index: 20;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            margin-left: -6px;
+            border-width: 6px 6px 0;
+            border-style: solid;
+            border-color: #3b82f6 transparent transparent transparent;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen flex flex-col overflow-hidden">
+
+    <!-- 헤더 -->
+    <header class="bg-indigo-600 text-white p-3 shadow-lg flex-none z-20">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl md:text-2xl font-extrabold flex items-center gap-2">
+                <i class="fas fa-shapes"></i> 원의 넓이 탐험대
+            </h1>
+            <div class="text-xs md:text-sm bg-indigo-700 px-3 py-1 rounded-full border border-indigo-400">
+                6학년 2학기
+            </div>
+        </div>
+    </header>
+
+    <!-- 탭 네비게이션 -->
+    <nav class="bg-white border-b border-slate-200 flex-none z-10">
+        <div class="max-w-6xl mx-auto flex justify-center text-sm md:text-base font-bold text-slate-500">
+            <button onclick="switchTab('circumference')" id="tab-circumference" class="tab-btn active flex-1 py-3 text-center hover:bg-slate-50">
+                <i class="fas fa-circle-notch mr-1"></i> 1. 원주와 원주율
+            </button>
+            <button onclick="switchTab('area-rect')" id="tab-area-rect" class="tab-btn flex-1 py-3 text-center hover:bg-slate-50">
+                <i class="fas fa-vector-square mr-1"></i> 2. 넓이 (직사각형)
+            </button>
+            <button onclick="switchTab('area-tri')" id="tab-area-tri" class="tab-btn flex-1 py-3 text-center hover:bg-slate-50">
+                <i class="fas fa-caret-up mr-1"></i> 3. 넓이 (삼각형)
+            </button>
+        </div>
+    </nav>
+
+    <!-- 컨트롤 패널 (모드에 따라 내용 변경) -->
+    <section class="bg-white p-3 border-b border-slate-200 flex-none z-10 shadow-sm">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row gap-4 items-center justify-center md:justify-between h-auto md:h-12">
+            
+            <!-- 공통: 지름 입력 (수정 가능) -->
+            <div id="common-controls" class="flex items-center gap-2">
+                <label class="font-bold text-slate-700 text-sm">지름:</label>
+                <div class="flex items-center bg-white border-2 border-slate-300 rounded px-2 py-1 focus-within:border-blue-500">
+                    <input type="number" id="diameterInput" value="4" min="2" max="8" step="0.1"
+                           class="w-16 bg-transparent text-center font-bold text-slate-700 outline-none"
+                           onchange="updateDiameter()">
+                    <span class="text-xs text-slate-500">cm</span>
+                </div>
+            </div>
+
+            <!-- 모드별 컨트롤 -->
+            <div class="flex-grow flex justify-center items-center w-full md:w-auto">
+                
+                <!-- 1. 원주 모드 컨트롤 -->
+                <div id="ctrl-circumference" class="control-group flex gap-2">
+                    <span class="text-sm text-slate-500 self-center mr-2">원을 드래그하여 굴리세요!</span>
+                    <button onclick="resetPosition()" class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-sm font-bold shadow">
+                        <i class="fas fa-undo"></i> 처음으로
+                    </button>
+                </div>
+
+                <!-- 2. 직사각형 모드 컨트롤 -->
+                <div id="ctrl-area-rect" class="control-group hidden flex flex-col md:flex-row gap-3 w-full md:w-auto items-center">
+                    <div class="flex gap-1 overflow-x-auto max-w-[300px] md:max-w-none pb-1 md:pb-0 hide-scrollbar">
+                        <button onclick="setSplit(8)" class="split-btn bg-slate-200 hover:bg-blue-100 text-slate-700 px-2 py-1 rounded text-xs font-bold transition border border-slate-300">8조각</button>
+                        <button onclick="setSplit(16)" class="split-btn bg-slate-200 hover:bg-blue-100 text-slate-700 px-2 py-1 rounded text-xs font-bold transition border border-slate-300">16</button>
+                        <button onclick="setSplit(32)" class="split-btn bg-slate-200 hover:bg-blue-100 text-slate-700 px-2 py-1 rounded text-xs font-bold transition border border-slate-300">32</button>
+                        <button onclick="setSplit(64)" class="split-btn bg-slate-200 hover:bg-blue-100 text-slate-700 px-2 py-1 rounded text-xs font-bold transition border border-slate-300">64</button>
+                        <button onclick="setSplit(128)" class="split-btn bg-slate-200 hover:bg-blue-100 text-slate-700 px-2 py-1 rounded text-xs font-bold transition border border-slate-300">128</button>
+                    </div>
+                    <div class="flex items-center gap-2 border-l pl-3 border-slate-300">
+                        <label class="text-xs font-bold text-blue-600 whitespace-nowrap">변형 과정:</label>
+                        <input type="range" id="rect-slider" min="0" max="100" value="0" class="w-32 md:w-48" oninput="updateTransform(this.value)">
+                    </div>
+                </div>
+
+                <!-- 3. 삼각형 모드 컨트롤 -->
+                <div id="ctrl-area-tri" class="control-group hidden flex flex-col md:flex-row gap-3 w-full md:w-auto items-center">
+                     <div class="flex gap-1 overflow-x-auto max-w-[300px] md:max-w-none pb-1 md:pb-0 hide-scrollbar">
+                        <button onclick="setSplit(4)" class="split-btn bg-slate-200 hover:bg-blue-100 text-slate-700 px-2 py-1 rounded text-xs font-bold transition border border-slate-300">4개</button>
+                        <button onclick="setSplit(8)" class="split-btn bg-slate-200 hover:bg-blue-100 text-slate-700 px-2 py-1 rounded text-xs font-bold transition border border-slate-300">8개</button>
+                        <button onclick="setSplit(16)" class="split-btn bg-slate-200 hover:bg-blue-100 text-slate-700 px-2 py-1 rounded text-xs font-bold transition border border-slate-300">16</button>
+                        <button onclick="setSplit(32)" class="split-btn bg-slate-200 hover:bg-blue-100 text-slate-700 px-2 py-1 rounded text-xs font-bold transition border border-slate-300">32</button>
+                    </div>
+                    <div class="flex items-center gap-2 border-l pl-3 border-slate-300">
+                        <label class="text-xs font-bold text-green-600 whitespace-nowrap">펼치기:</label>
+                        <input type="range" id="tri-slider" min="0" max="100" value="0" class="w-32 md:w-48" oninput="updateTransform(this.value)">
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- 메인 캔버스 영역 -->
+    <main class="flex-grow relative bg-slate-100 overflow-hidden flex flex-col">
+        
+        <!-- 설명 패널 (상단 중앙 플로팅) -->
+        <div id="info-panel" class="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 w-11/12 max-w-3xl pointer-events-none transition-opacity duration-300">
+            <!-- JS로 내용 업데이트 -->
+        </div>
+
+        <!-- 굴리기 모드용 거리 표시 말풍선 (동적 위치) -->
+        <div id="distance-bubble" class="bubble hidden">0.0 cm</div>
+
+        <!-- 캔버스 컨테이너 (스크롤 없음) -->
+        <div id="canvas-wrapper" class="w-full h-full overflow-hidden relative bg-white flex items-center justify-center">
+            <canvas id="mainCanvas"></canvas>
+        </div>
+    </main>
+
+    <script>
+        // --- 전역 변수 및 설정 ---
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const wrapper = document.getElementById('canvas-wrapper');
+        const bubble = document.getElementById('distance-bubble');
+        
+        let currentTab = 'circumference'; 
+        
+        // 동적 스케일링을 위한 변수
+        let pixelsPerCm = 40; // 기본값, resize 시 변경됨
+        let diameterCm = 4; 
+        let radiusPx = 0;
+        
+        // 위치 변수 (반응형)
+        let rollX = 0; 
+        let rollStartX = 0;
+        
+        // 넓이 모드 변수 (반응형)
+        let rectCx = 0;
+        let rectStartX = 0;
+        let triCx = 0;
+        let triCenterX = 0;
+
+        let isDragging = false;
+        let isFinished = false; 
+        let lastPointerX = 0;
+
+        let splitCount = 8; 
+        let transformProgress = 0; 
+
+        // 색상 팔레트
+        const colors = {
+            rectRed: '#ef4444',    // 빨강
+            rectBlue: '#3b82f6',   // 파랑
+            accent: '#ef4444',
+            bg: '#f8fafc',
+            text: '#334155'
+        };
+
+        // --- 초기화 및 탭 관리 ---
+        function init() {
+            // 반응형 리사이즈
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+            });
+            
+            switchTab('circumference');
+            
+            // 이벤트 리스너
+            canvas.addEventListener('mousedown', onPointerDown);
+            canvas.addEventListener('touchstart', onPointerDown, {passive: false});
+            window.addEventListener('mousemove', onPointerMove);
+            window.addEventListener('touchmove', onPointerMove, {passive: false});
+            window.addEventListener('mouseup', onPointerUp);
+            window.addEventListener('touchend', onPointerUp);
+        }
+
+        // --- 핵심: 한 화면에 맞추기 위한 스케일링 계산 ---
+        function calculateLayout() {
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            // 1. 필요한 총 가로 길이(픽셀) 계산 (기본 40px/cm 기준)
+            // (1) 원주 모드: 왼쪽여백 + 지름*PI + 오른쪽여백
+            // (2) 직사각형: 왼쪽원 + 여백 + 오른쪽직사각형(PI*R)
+            // (3) 삼각형: 왼쪽원 + 여백 + 오른쪽삼각형(2*PI*R) -> 이게 제일 긺
+            
+            // 여백 비율
+            const paddingRatio = 0.2; // 전체의 20%는 여백으로
+            
+            // 모드별 필요 너비 계산 (단위: cm)
+            let neededWidthCm = 0;
+            
+            // 모든 모드를 아우르는 적절한 스케일 찾기
+            // 가장 긴 것은 삼각형의 밑변(원주 = 지름*PI)
+            // 대략 원주(25cm) + 여백(5cm) = 30cm 정도가 최대
+            const maxNeededCm = (diameterCm * Math.PI) + diameterCm + 2; // 원 + 원주 + 여백
+            
+            // 화면 너비에 맞게 pixelsPerCm 조정
+            // w = maxNeededCm * pixelsPerCm
+            // pixelsPerCm = w / maxNeededCm
+            
+            // 기본 40을 넘지 않도록 (너무 커지는 것 방지)
+            const calculatedPPCM = (w * 0.85) / maxNeededCm; // 85% 너비 사용
+            pixelsPerCm = Math.min(40, calculatedPPCM); 
+            
+            // 최소값 보정 (너무 작아지지 않게)
+            if (pixelsPerCm < 15) pixelsPerCm = 15; // 모바일 최소 가독성
+
+            // 반지름 등 재계산
+            radiusPx = (diameterCm * pixelsPerCm) / 2;
+            
+            // 위치 좌표 재설정 (화면 비율에 따라 배치)
+            
+            // 1. 굴리기 모드 위치
+            rollStartX = w * 0.15; // 화면 15% 지점에서 시작
+            if (currentTab === 'circumference' && !isDragging && rollX === 0) {
+                 rollX = rollStartX; // 초기화 시에만
+            } else if (currentTab === 'circumference' && !isDragging) {
+                // 리사이즈 시 비율 유지 (현재 진행도에 따라)
+                // 복잡하면 그냥 시작점으로 리셋하는게 안전할수도 있지만,
+                // 여기선 리사이즈 시 위치 보정 생략하고 draw에서 처리
+            }
+
+            // 2. 직사각형 모드 위치
+            rectCx = w * 0.25; // 왼쪽 25%
+            rectStartX = w * 0.6; // 오른쪽 60% 지점이 직사각형 중심이 되도록? 아니면 시작점?
+            
+            // 3. 삼각형 모드 위치
+            triCx = w * 0.2; // 왼쪽 20%
+            triCenterX = w * 0.6; // 오른쪽 60%
+        }
+
+        function resizeCanvas() {
+            // 스크롤 없이 꽉 채우기
+            canvas.width = wrapper.clientWidth;
+            canvas.height = wrapper.clientHeight;
+            
+            calculateLayout();
+            
+            // 굴리기 모드일 때 위치 리셋 (화면 크기 바뀌면 어긋날 수 있으므로)
+            if (currentTab === 'circumference') {
+               // 진행 중이었다면 비율 맞춰주고 싶지만, UX상 리셋이 깔끔함
+               if(!isDragging) {
+                   rollX = rollStartX;
+                   isFinished = false;
+                   bubble.classList.add('hidden');
+               }
+            }
+            
+            draw();
+        }
+
+        function updateDiameter() {
+            const input = document.getElementById('diameterInput');
+            let val = parseFloat(input.value);
+            if (isNaN(val)) val = 4;
+            if (val < 2) val = 2;
+            if (val > 8) val = 8;
+            val = Math.round(val * 10) / 10;
+            
+            input.value = val;
+            diameterCm = val;
+            
+            calculateLayout(); // 지름 바뀌면 스케일 다시 계산
+            resetPosition(); 
+            updateInfoPanel();
+        }
+
+        function switchTab(tabName) {
+            currentTab = tabName;
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            document.querySelectorAll('.control-group').forEach(grp => grp.classList.add('hidden'));
+            document.getElementById(`ctrl-${tabName}`).classList.remove('hidden');
+
+            // 탭 변경 시 리셋
+            calculateLayout();
+            rollX = rollStartX;
+            transformProgress = 0;
+            isFinished = false;
+            bubble.classList.add('hidden'); 
+
+            if(tabName === 'area-rect') {
+                splitCount = 8;
+                document.getElementById('rect-slider').value = 0;
+            } else if (tabName === 'area-tri') {
+                splitCount = 4;
+                document.getElementById('tri-slider').value = 0;
+            }
+
+            updateInfoPanel();
+            draw();
+        }
+
+        function setSplit(n) {
+            splitCount = n;
+            draw();
+            updateInfoPanel();
+        }
+
+        function updateTransform(val) {
+            transformProgress = val / 100;
+            draw();
+        }
+
+        // --- 그리기 루프 ---
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (currentTab === 'circumference') {
+                drawCircumferenceMode();
+            } else if (currentTab === 'area-rect') {
+                drawAreaRectMode();
+            } else if (currentTab === 'area-tri') {
+                drawAreaTriMode();
+            }
+        }
+
+        // --- 1. 원주율 (굴리기) 모드 ---
+        function drawCircumferenceMode() {
+            const groundY = canvas.height * 0.7;
+            const dist = rollX - rollStartX;
+            const distCm = dist / pixelsPerCm; // 스케일 적용
+            const rotation = dist / radiusPx;
+            const circumferencePx = diameterCm * Math.PI * pixelsPerCm;
+
+            if (dist > 0 && !isFinished) {
+                const canvasRect = canvas.getBoundingClientRect();
+                bubble.style.left = (canvasRect.left + rollX) + 'px';
+                bubble.style.top = (canvasRect.top + groundY - radiusPx - 15) + 'px';
+                bubble.innerText = distCm.toFixed(1) + " cm";
+                bubble.classList.remove('hidden');
+            } else {
+                bubble.classList.add('hidden');
+            }
+
+            // 바닥선
+            ctx.beginPath();
+            ctx.moveTo(0, groundY);
+            ctx.lineTo(canvas.width, groundY);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 눈금자 (동적 간격)
+            // 화면이 좁으면 눈금 간격을 넓힘 (5cm 단위 등)
+            // pixelsPerCm가 작을수록 눈금이 촘촘해지므로 렌더링 부하 방지
+            const tickStep = pixelsPerCm < 20 ? 5 : 1; 
+
+            ctx.fillStyle = "#475569";
+            ctx.font = "bold 12px sans-serif";
+            ctx.textAlign = "center";
+            
+            // 전체 캔버스 너비에 대해 눈금 그리기 (시작점 기준)
+            const maxCm = (canvas.width - rollStartX) / pixelsPerCm;
+            
+            for(let i=0; i <= maxCm; i += tickStep) {
+                const tx = rollStartX + (i * pixelsPerCm);
+                ctx.beginPath();
+                ctx.moveTo(tx, groundY);
+                ctx.lineTo(tx, groundY + 10);
+                ctx.strokeStyle = "#64748b";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                
+                // 5cm 단위 혹은 공간이 충분하면 표시
+                if (i % 5 === 0 || tickStep > 1) {
+                    ctx.fillText(i, tx, groundY + 25);
+                }
+            }
+
+            // 굴러간 자국
+            if(dist > 0) {
+                ctx.beginPath();
+                ctx.moveTo(rollStartX, groundY);
+                ctx.lineTo(rollX, groundY);
+                ctx.strokeStyle = colors.accent;
+                ctx.lineWidth = 6;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            }
+
+            // 목표 지점
+            const targetX = rollStartX + circumferencePx;
+            ctx.beginPath();
+            ctx.moveTo(targetX, groundY - 30);
+            ctx.lineTo(targetX, groundY + 30);
+            ctx.strokeStyle = '#3b82f6';
+            ctx.setLineDash([5,5]);
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#3b82f6';
+            ctx.fillText("한 바퀴", targetX, groundY - 40);
+
+            // 원 그리기
+            ctx.save();
+            ctx.translate(rollX, groundY - radiusPx);
+            ctx.rotate(rotation);
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, radiusPx, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+            ctx.fill();
+            ctx.strokeStyle = '#2563eb';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // 바닥점
+            ctx.beginPath();
+            ctx.arc(0, radiusPx, 5, 0, Math.PI*2); 
+            ctx.fillStyle = colors.accent;
+            ctx.fill();
+
+            ctx.restore();
+            
+            // 시작점 표시
+            ctx.fillStyle = "#333";
+            ctx.fillText("출발", rollStartX, groundY - 50);
+
+            // 완료 상태 체크
+            if (dist >= circumferencePx - 1 && !isFinished) { 
+                isFinished = true;
+                updateInfoPanel(); 
+            }
+        }
+
+        // --- 2. 원의 넓이 (직사각형) 모드 ---
+        function drawAreaRectMode() {
+            const cy = canvas.height / 2;
+            
+            ctx.save();
+            ctx.translate(rectCx, cy);
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, radiusPx, 0, Math.PI*2);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.stroke();
+
+            const angleStep = (Math.PI * 2) / splitCount;
+            const rectTotalWidth = Math.PI * radiusPx;
+            const pieceWidth = rectTotalWidth / (splitCount / 2); 
+
+            for (let i = 0; i < splitCount; i++) {
+                const startAngle = i * angleStep;
+                const endAngle = startAngle + angleStep;
+                const midAngle = startAngle + angleStep / 2;
+
+                const t = transformProgress;
+                
+                const colIndex = Math.floor(i / 2); 
+                let rectX_local = colIndex * pieceWidth;
+                if (i % 2 !== 0) {
+                    rectX_local += (pieceWidth / 2);
+                }
+
+                // rectStartX는 화면의 60% 지점. 여기서 직사각형의 중심이 되도록 배치
+                // targetX = (화면상 직사각형 중심 - 화면상 원 중심) + 로컬 위치 - 직사각형 절반
+                const targetX = (rectStartX - rectCx) + rectX_local - (rectTotalWidth / 2) + (pieceWidth/2);
+                
+                const targetY = (i % 2 === 0) ? (radiusPx/2) : -(radiusPx/2);
+                const targetRot = (i % 2 === 0) ? -Math.PI/2 : Math.PI/2;
+                
+                const curX = targetX * t; 
+                const curY = targetY * t;
+                
+                ctx.save();
+                ctx.translate(curX, curY);
+                ctx.rotate( (targetRot - midAngle) * t );
+
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radiusPx, startAngle, endAngle);
+                ctx.closePath();
+                
+                ctx.fillStyle = (i % 2 === 0) ? colors.rectRed : colors.rectBlue;
+                ctx.fill();
+                // 조각이 작아지면 선 두께도 줄임
+                if(splitCount < 64) {
+                    ctx.strokeStyle = "white";
+                    ctx.lineWidth = pixelsPerCm > 20 ? 1 : 0.5;
+                    ctx.stroke();
+                }
+                
+                ctx.restore();
+            }
+            ctx.restore();
+
+            if (transformProgress > 0.8) {
+                const rectW = Math.PI * radiusPx;
+                const finalStartX = rectStartX - (rectW/2) + (rectTotalWidth / splitCount / 2); 
+                
+                // 가로 라벨
+                const labelY = cy + radiusPx/2 + 25;
+                ctx.beginPath();
+                ctx.moveTo(finalStartX, labelY);
+                ctx.lineTo(finalStartX + rectW, labelY);
+                ctx.strokeStyle = '#334155';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(finalStartX, labelY - 5);
+                ctx.lineTo(finalStartX, labelY + 5);
+                ctx.moveTo(finalStartX + rectW, labelY - 5);
+                ctx.lineTo(finalStartX + rectW, labelY + 5);
+                ctx.stroke();
+
+                ctx.fillStyle = '#334155';
+                ctx.font = "bold 12px sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText("가로 = 원주 × 1/2", finalStartX + rectW/2, labelY + 15);
+
+                // 세로 라벨
+                const labelX = finalStartX + rectW + 10;
+                const topY = cy - radiusPx/2;
+                const bottomY = cy + radiusPx/2;
+                
+                ctx.beginPath();
+                ctx.moveTo(labelX, topY);
+                ctx.lineTo(labelX, bottomY);
+                ctx.stroke();
+                
+                ctx.beginPath(); 
+                ctx.moveTo(labelX - 5, topY);
+                ctx.lineTo(labelX + 5, topY);
+                ctx.moveTo(labelX - 5, bottomY);
+                ctx.lineTo(labelX + 5, bottomY);
+                ctx.stroke();
+
+                ctx.textAlign = 'left';
+                ctx.fillText("세로 = (반지름)", labelX + 8, cy + 4);
+            }
+        }
+
+        // --- 3. 원의 넓이 (삼각형) 모드 ---
+        function drawAreaTriMode() {
+            const cy = canvas.height * 0.75; 
+            
+            // 바닥선
+            ctx.beginPath();
+            ctx.moveTo(0, cy);
+            ctx.lineTo(canvas.width, cy);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.stroke();
+
+            const ringWidth = radiusPx / splitCount;
+
+            for (let i = 0; i < splitCount; i++) {
+                const currentOuterR = radiusPx - (i * ringWidth); 
+                const midR = currentOuterR - (ringWidth/2);
+                
+                const stripLen = 2 * Math.PI * midR; 
+                
+                const colorVal = 100 + (i * (155/splitCount));
+                const color = `rgb(${colorVal}, ${100}, 255)`;
+
+                const t = transformProgress;
+                
+                // 목표 위치: 삼각형의 아래쪽부터 쌓임
+                const targetY = cy - (i * ringWidth) - (ringWidth/2);
+                
+                const circleCenterY = cy - radiusPx;
+                const startLegY = circleCenterY + midR;
+                
+                const curLegY = startLegY + (targetY - startLegY) * t;
+
+                // X 이동: triCx -> triCenterX
+                const curX = triCx + (triCenterX - triCx) * t;
+
+                const maxAngle = 2 * Math.PI;
+                const minAngle = 0.01; 
+                const angle = maxAngle * (1 - t) + minAngle * t;
+                
+                const r_morph = stripLen / angle;
+                const sag = r_morph * (1 - Math.cos(angle / 2));
+                
+                const arcCX = curX;
+                const arcCY = curLegY - sag + r_morph;
+                
+                ctx.beginPath();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = ringWidth - 0.5; 
+                if (ctx.lineWidth < 1) ctx.lineWidth = 1;
+                
+                ctx.arc(arcCX, arcCY, r_morph, -Math.PI/2 - angle/2, -Math.PI/2 + angle/2);
+                ctx.stroke();
+
+                // 텍스트 표시
+                if (i === 0 && t > 0.9) {
+                    ctx.fillStyle = "#333";
+                    ctx.textAlign = "center";
+                    ctx.font = "bold 12px sans-serif";
+                    ctx.fillText("밑변 = 원주", triCenterX, cy + 20);
+                }
+                if (i === splitCount - 1 && t > 0.9) {
+                    const rightX = triCenterX + (stripLen/2) + 20;
+                    ctx.beginPath();
+                    ctx.moveTo(rightX, cy);
+                    ctx.lineTo(rightX, cy - radiusPx);
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = "#333";
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(rightX-5, cy);
+                    ctx.lineTo(rightX+5, cy);
+                    ctx.moveTo(rightX-5, cy - radiusPx);
+                    ctx.lineTo(rightX+5, cy - radiusPx);
+                    ctx.stroke();
+
+                    ctx.textAlign = "left";
+                    ctx.fillText("높이 = (반지름)", rightX + 8, cy - radiusPx/2);
+                }
+            }
+        }
+
+        // --- 정보 패널 업데이트 ---
+        function updateInfoPanel() {
+            const panel = document.getElementById('info-panel');
+            let html = '';
+
+            if (currentTab === 'circumference') {
+                if (!isFinished) {
+                    html = `
+                        <div class="bg-white/95 backdrop-blur rounded-xl p-4 shadow-xl border border-indigo-200 text-center">
+                            <h2 class="text-lg font-bold text-slate-800">지름이 ${diameterCm}cm인 원</h2>
+                            <p class="text-sm text-slate-600 mt-1">원을 드래그하여 끝까지 굴려보세요.</p>
+                            <div class="mt-2 text-lg font-bold text-indigo-600 bg-indigo-50 py-2 rounded-lg">
+                                원주율 = 원주 ÷ 지름
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    const circumference = (diameterCm * Math.PI).toFixed(4);
+                    html = `
+                        <div class="bg-white/95 backdrop-blur rounded-xl p-4 shadow-xl border-2 border-indigo-500 text-center">
+                            <h2 class="text-lg font-bold text-slate-800 mb-2">🎉 측정 완료!</h2>
+                            <div class="flex flex-wrap justify-center gap-4 text-sm md:text-base">
+                                <div class="bg-slate-100 px-3 py-1 rounded">
+                                    <span class="text-slate-500">원주 = </span>
+                                    <span class="font-bold text-slate-900">${circumference} cm</span>
+                                </div>
+                                <div class="bg-slate-100 px-3 py-1 rounded">
+                                    <span class="text-slate-500">지름 = </span>
+                                    <span class="font-bold text-slate-900">${diameterCm} cm</span>
+                                </div>
+                                <div class="bg-indigo-100 px-3 py-1 rounded border border-indigo-200">
+                                    <span class="text-indigo-600 font-bold">원주율 = 3.1416</span>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-xs text-slate-500">
+                                (원주 ÷ 지름 = 3.141592...)
+                            </div>
+                        </div>
+                    `;
+                }
+            } else if (currentTab === 'area-rect') {
+                html = `
+                    <div class="bg-white/95 backdrop-blur rounded-xl p-3 shadow-xl border border-blue-200 text-left w-full">
+                        <h2 class="text-base font-bold text-slate-800 text-center mb-1">직사각형을 이용한 원의 넓이</h2>
+                        <div class="text-xs md:text-sm text-slate-700 space-y-1 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                            <p class="font-bold text-slate-900">넓이 = 가로 × 세로</p>
+                            <p class="pl-2">= (원주 × 1/2) × (반지름)</p>
+                            <p class="pl-2">= <span class="text-red-600 font-extrabold">(반지름) × 3.14 × (반지름)</span></p>
+                            <div class="mt-1 text-center font-bold text-indigo-700 bg-indigo-100 py-1 rounded">
+                                ∴ 원의 넓이 = (반지름) × (반지름) × 3.14
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (currentTab === 'area-tri') {
+                html = `
+                    <div class="bg-white/95 backdrop-blur rounded-xl p-3 shadow-xl border border-purple-200 text-left w-full">
+                        <h2 class="text-base font-bold text-slate-800 text-center mb-1">삼각형을 이용한 원의 넓이</h2>
+                        <div class="text-xs md:text-sm text-slate-700 space-y-1 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                            <p class="font-bold text-slate-900">넓이 = 밑변 × 높이 ÷ 2</p>
+                            <p class="pl-2">= 원주 × (반지름) ÷ 2</p>
+                            <p class="pl-2">= <span class="text-red-600 font-extrabold">(반지름) × 3.14 × (반지름)</span></p>
+                            <div class="mt-1 text-center font-bold text-indigo-700 bg-indigo-100 py-1 rounded">
+                                ∴ 원의 넓이 = (반지름) × (반지름) × 3.14
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            panel.innerHTML = html;
+        }
+
+        // --- 이벤트 핸들러 ---
+        function onPointerDown(e) {
+            if(currentTab !== 'circumference') return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+            const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+            
+            const groundY = canvas.height * 0.7;
+            const hitRadius = radiusPx + 60;
+            
+            if (Math.abs(x - rollX) < hitRadius && Math.abs(y - (groundY - radiusPx)) < hitRadius) {
+                isDragging = true;
+                lastPointerX = e.touches ? e.touches[0].clientX : e.clientX;
+                bubble.classList.remove('hidden'); 
+            }
+        }
+
+        function onPointerMove(e) {
+            if (!isDragging) return;
+            e.preventDefault(); 
+            const cx = e.touches ? e.touches[0].clientX : e.clientX;
+            const dx = cx - lastPointerX;
+            lastPointerX = cx;
+
+            rollX += dx;
+            if (rollX < rollStartX) rollX = rollStartX;
+            
+            const maxDist = diameterCm * Math.PI * pixelsPerCm;
+            if (rollX > rollStartX + maxDist) rollX = rollStartX + maxDist;
+
+            draw();
+        }
+
+        function onPointerUp() {
+            isDragging = false;
+        }
+
+        function resetPosition() {
+            // 위치 리셋은 현재 화면 비율에 맞춰서
+            const w = canvas.width;
+            rollStartX = w * 0.15;
+            rollX = rollStartX;
+            
+            isFinished = false;
+            bubble.classList.add('hidden');
+            updateInfoPanel();
+            draw();
+        }
+
+        // 실행
+        window.onload = init;
+
+    </script>
+</body>
+</html>
