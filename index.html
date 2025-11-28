@@ -11,8 +11,7 @@
         
         body {
             font-family: 'Nanum Gothic', sans-serif;
-            touch-action: none; 
-            overscroll-behavior: none; /* 맥/모바일 스와이프 바운스 방지 */
+            touch-action: pan-y; /* 수직 스크롤 허용, 수평은 캔버스에 맡김 */
         }
 
         /* 탭 버튼 스타일 */
@@ -56,18 +55,18 @@
         /* 말풍선 스타일 */
         .bubble {
             position: absolute;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 5px 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 5px 12px;
             border-radius: 10px;
             border: 2px solid #3b82f6;
             font-weight: bold;
             color: #1e3a8a;
             pointer-events: none;
-            font-size: 0.9rem;
-            transform: translate(-50%, -100%);
+            font-size: 0.95rem;
+            transform: translate(-50%, -120%);
             white-space: nowrap;
             z-index: 20;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
         .bubble::after {
             content: '';
@@ -78,6 +77,21 @@
             border-width: 6px 6px 0;
             border-style: solid;
             border-color: #3b82f6 transparent transparent transparent;
+        }
+
+        /* 스크롤바 스타일링 (세련되게) */
+        #canvas-wrapper::-webkit-scrollbar {
+            height: 10px;
+        }
+        #canvas-wrapper::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        #canvas-wrapper::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 5px;
+        }
+        #canvas-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
         }
     </style>
 </head>
@@ -110,11 +124,11 @@
         </div>
     </nav>
 
-    <!-- 컨트롤 패널 (모드에 따라 내용 변경) -->
+    <!-- 컨트롤 패널 -->
     <section class="bg-white p-3 border-b border-slate-200 flex-none z-10 shadow-sm">
         <div class="max-w-6xl mx-auto flex flex-col md:flex-row gap-4 items-center justify-center md:justify-between h-auto md:h-12">
             
-            <!-- 공통: 지름 입력 (수정 가능) -->
+            <!-- 공통: 지름 입력 -->
             <div id="common-controls" class="flex items-center gap-2">
                 <label class="font-bold text-slate-700 text-sm">지름:</label>
                 <div class="flex items-center bg-white border-2 border-slate-300 rounded px-2 py-1 focus-within:border-blue-500">
@@ -128,7 +142,7 @@
             <!-- 모드별 컨트롤 -->
             <div class="flex-grow flex justify-center items-center w-full md:w-auto">
                 
-                <!-- 1. 원주 모드 컨트롤 -->
+                <!-- 1. 원주 모드 -->
                 <div id="ctrl-circumference" class="control-group flex gap-2">
                     <span class="text-sm text-slate-500 self-center mr-2">원을 드래그하여 굴리세요!</span>
                     <button onclick="resetPosition()" class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-sm font-bold shadow">
@@ -136,7 +150,7 @@
                     </button>
                 </div>
 
-                <!-- 2. 직사각형 모드 컨트롤 -->
+                <!-- 2. 직사각형 모드 -->
                 <div id="ctrl-area-rect" class="control-group hidden flex flex-col md:flex-row gap-3 w-full md:w-auto items-center">
                     <div class="flex gap-1 overflow-x-auto max-w-[300px] md:max-w-none pb-1 md:pb-0 hide-scrollbar">
                         <button onclick="setSplit(8)" class="split-btn bg-slate-200 hover:bg-blue-100 text-slate-700 px-2 py-1 rounded text-xs font-bold transition border border-slate-300">8조각</button>
@@ -151,7 +165,7 @@
                     </div>
                 </div>
 
-                <!-- 3. 삼각형 모드 컨트롤 -->
+                <!-- 3. 삼각형 모드 -->
                 <div id="ctrl-area-tri" class="control-group hidden flex flex-col md:flex-row gap-3 w-full md:w-auto items-center">
                      <div class="flex gap-1 overflow-x-auto max-w-[300px] md:max-w-none pb-1 md:pb-0 hide-scrollbar">
                         <button onclick="setSplit(4)" class="split-btn bg-slate-200 hover:bg-blue-100 text-slate-700 px-2 py-1 rounded text-xs font-bold transition border border-slate-300">4개</button>
@@ -172,16 +186,16 @@
     <!-- 메인 캔버스 영역 -->
     <main class="flex-grow relative bg-slate-100 overflow-hidden flex flex-col">
         
-        <!-- 설명 패널 (상단 중앙 플로팅) -->
+        <!-- 설명 패널 -->
         <div id="info-panel" class="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 w-11/12 max-w-3xl pointer-events-none transition-opacity duration-300">
             <!-- JS로 내용 업데이트 -->
         </div>
 
-        <!-- 굴리기 모드용 거리 표시 말풍선 (동적 위치) -->
+        <!-- 굴리기 모드용 거리 표시 말풍선 -->
         <div id="distance-bubble" class="bubble hidden">0.0 cm</div>
 
-        <!-- 캔버스 컨테이너 (스크롤 없음) -->
-        <div id="canvas-wrapper" class="w-full h-full overflow-hidden relative bg-white flex items-center justify-center">
+        <!-- 캔버스 컨테이너 (스크롤 가능) -->
+        <div id="canvas-wrapper" class="w-full h-full relative bg-white overflow-x-auto overflow-y-hidden flex items-center">
             <canvas id="mainCanvas"></canvas>
         </div>
     </main>
@@ -196,15 +210,15 @@
         let currentTab = 'circumference'; 
         
         // 동적 스케일링을 위한 변수
-        let pixelsPerCm = 40; // 기본값, resize 시 변경됨
+        let pixelsPerCm = 40; 
+        const MIN_PIXELS_PER_CM = 30; // 모바일에서도 이 이하로는 작아지지 않음 (가독성 보장)
+        
         let diameterCm = 4; 
         let radiusPx = 0;
         
-        // 위치 변수 (반응형)
+        // 위치 변수
         let rollX = 0; 
         let rollStartX = 0;
-        
-        // 넓이 모드 변수 (반응형)
         let rectCx = 0;
         let rectStartX = 0;
         let triCx = 0;
@@ -217,25 +231,18 @@
         let splitCount = 8; 
         let transformProgress = 0; 
 
-        // 색상 팔레트
         const colors = {
-            rectRed: '#ef4444',    // 빨강
-            rectBlue: '#3b82f6',   // 파랑
+            rectRed: '#ef4444',    
+            rectBlue: '#3b82f6',   
             accent: '#ef4444',
             bg: '#f8fafc',
             text: '#334155'
         };
 
-        // --- 초기화 및 탭 관리 ---
         function init() {
-            // 반응형 리사이즈
-            window.addEventListener('resize', () => {
-                resizeCanvas();
-            });
-            
+            window.addEventListener('resize', () => resizeCanvas());
             switchTab('circumference');
             
-            // 이벤트 리스너
             canvas.addEventListener('mousedown', onPointerDown);
             canvas.addEventListener('touchstart', onPointerDown, {passive: false});
             window.addEventListener('mousemove', onPointerMove);
@@ -244,79 +251,69 @@
             window.addEventListener('touchend', onPointerUp);
         }
 
-        // --- 핵심: 한 화면에 맞추기 위한 스케일링 계산 ---
+        // --- 레이아웃 및 크기 계산 (하이브리드 반응형) ---
         function calculateLayout() {
-            const w = canvas.width;
-            const h = canvas.height;
+            const wrapperWidth = wrapper.clientWidth;
+            const wrapperHeight = wrapper.clientHeight;
             
-            // 1. 필요한 총 가로 길이(픽셀) 계산 (기본 40px/cm 기준)
-            // (1) 원주 모드: 왼쪽여백 + 지름*PI + 오른쪽여백
-            // (2) 직사각형: 왼쪽원 + 여백 + 오른쪽직사각형(PI*R)
-            // (3) 삼각형: 왼쪽원 + 여백 + 오른쪽삼각형(2*PI*R) -> 이게 제일 긺
+            // 1. 필요한 총 가로 길이(단위: cm) 예측
+            // - 원주 모드: 여백(2) + 지름 + 여백(1) + 원주(3.14*지름) + 여백(3)
+            // - 넓이 모드도 비슷하게 계산
+            const maxNeededCm = 2 + diameterCm + 1 + (diameterCm * Math.PI) + 3;
             
-            // 여백 비율
-            const paddingRatio = 0.2; // 전체의 20%는 여백으로
+            // 2. 화면에 꽉 채웠을 때의 비율 계산
+            let possiblePPCM = wrapperWidth / maxNeededCm;
             
-            // 모드별 필요 너비 계산 (단위: cm)
-            let neededWidthCm = 0;
+            // 3. 최소 크기 보장 로직
+            if (possiblePPCM < MIN_PIXELS_PER_CM) {
+                // 화면이 너무 좁으면(모바일), 최소 크기로 고정하고 스크롤 발생시킴
+                pixelsPerCm = MIN_PIXELS_PER_CM;
+                canvas.width = maxNeededCm * pixelsPerCm; // 캔버스를 화면보다 크게 설정
+                wrapper.style.justifyContent = 'flex-start'; // 왼쪽 정렬
+            } else {
+                // 화면이 충분히 넓으면(PC), 한 화면에 맞춤 (최대 60px 제한)
+                pixelsPerCm = Math.min(60, possiblePPCM);
+                canvas.width = wrapperWidth; // 캔버스를 화면에 맞춤
+                wrapper.style.justifyContent = 'center'; // 중앙 정렬 (선택적)
+            }
             
-            // 모든 모드를 아우르는 적절한 스케일 찾기
-            // 가장 긴 것은 삼각형의 밑변(원주 = 지름*PI)
-            // 대략 원주(25cm) + 여백(5cm) = 30cm 정도가 최대
-            const maxNeededCm = (diameterCm * Math.PI) + diameterCm + 2; // 원 + 원주 + 여백
-            
-            // 화면 너비에 맞게 pixelsPerCm 조정
-            // w = maxNeededCm * pixelsPerCm
-            // pixelsPerCm = w / maxNeededCm
-            
-            // 기본 40을 넘지 않도록 (너무 커지는 것 방지)
-            const calculatedPPCM = (w * 0.85) / maxNeededCm; // 85% 너비 사용
-            pixelsPerCm = Math.min(40, calculatedPPCM); 
-            
-            // 최소값 보정 (너무 작아지지 않게)
-            if (pixelsPerCm < 15) pixelsPerCm = 15; // 모바일 최소 가독성
+            canvas.height = wrapperHeight;
 
-            // 반지름 등 재계산
+            // 4. 반지름 및 좌표 재설정
             radiusPx = (diameterCm * pixelsPerCm) / 2;
             
-            // 위치 좌표 재설정 (화면 비율에 따라 배치)
+            // 요소 배치 위치 (cm 단위로 생각하고 변환)
+            // 화면 비율이 아니라, 캔버스 내에서의 절대 위치(px)로 설정해야 스크롤 대응 가능
             
-            // 1. 굴리기 모드 위치
-            rollStartX = w * 0.15; // 화면 15% 지점에서 시작
-            if (currentTab === 'circumference' && !isDragging && rollX === 0) {
-                 rollX = rollStartX; // 초기화 시에만
-            } else if (currentTab === 'circumference' && !isDragging) {
-                // 리사이즈 시 비율 유지 (현재 진행도에 따라)
-                // 복잡하면 그냥 시작점으로 리셋하는게 안전할수도 있지만,
-                // 여기선 리사이즈 시 위치 보정 생략하고 draw에서 처리
-            }
+            // 시작점 여백: 약 15% 또는 최소 100px
+            const startMargin = Math.max(canvas.width * 0.1, 80); 
 
-            // 2. 직사각형 모드 위치
-            rectCx = w * 0.25; // 왼쪽 25%
-            rectStartX = w * 0.6; // 오른쪽 60% 지점이 직사각형 중심이 되도록? 아니면 시작점?
+            // (1) 굴리기 모드 위치
+            rollStartX = startMargin;
             
-            // 3. 삼각형 모드 위치
-            triCx = w * 0.2; // 왼쪽 20%
-            triCenterX = w * 0.6; // 오른쪽 60%
+            // (2) 직사각형 모드 위치
+            rectCx = startMargin + radiusPx; // 왼쪽 원 중심
+            // 직사각형 시작점: 원 중심에서 적당히 떨어뜨림 (지름 * 2 정도)
+            rectStartX = rectCx + (diameterCm * 2.5 * pixelsPerCm);
+            
+            // (3) 삼각형 모드 위치
+            triCx = startMargin + radiusPx; // 왼쪽 원 중심
+            // 삼각형 중심: 원 중심에서 적당히 떨어뜨림
+            triCenterX = triCx + (diameterCm * 2.5 * pixelsPerCm);
         }
 
         function resizeCanvas() {
-            // 스크롤 없이 꽉 채우기
-            canvas.width = wrapper.clientWidth;
-            canvas.height = wrapper.clientHeight;
-            
             calculateLayout();
             
-            // 굴리기 모드일 때 위치 리셋 (화면 크기 바뀌면 어긋날 수 있으므로)
-            if (currentTab === 'circumference') {
-               // 진행 중이었다면 비율 맞춰주고 싶지만, UX상 리셋이 깔끔함
-               if(!isDragging) {
+            // 리사이즈 시 굴리기 위치가 어긋나지 않도록 초기화 (UX상 안전)
+            if (currentTab === 'circumference' && !isDragging) {
+               // 진행 중이 아니면 리셋
+               if(rollX === 0 || !isDragging) {
                    rollX = rollStartX;
                    isFinished = false;
                    bubble.classList.add('hidden');
                }
             }
-            
             draw();
         }
 
@@ -331,7 +328,7 @@
             input.value = val;
             diameterCm = val;
             
-            calculateLayout(); // 지름 바뀌면 스케일 다시 계산
+            resizeCanvas(); // 레이아웃 재계산
             resetPosition(); 
             updateInfoPanel();
         }
@@ -345,13 +342,7 @@
             document.querySelectorAll('.control-group').forEach(grp => grp.classList.add('hidden'));
             document.getElementById(`ctrl-${tabName}`).classList.remove('hidden');
 
-            // 탭 변경 시 리셋
-            calculateLayout();
-            rollX = rollStartX;
-            transformProgress = 0;
-            isFinished = false;
-            bubble.classList.add('hidden'); 
-
+            // 탭 변경 시 설정 초기화
             if(tabName === 'area-rect') {
                 splitCount = 8;
                 document.getElementById('rect-slider').value = 0;
@@ -359,6 +350,16 @@
                 splitCount = 4;
                 document.getElementById('tri-slider').value = 0;
             }
+
+            // 레이아웃 다시 계산 (탭마다 필요한 너비가 다를 수 있으므로)
+            calculateLayout();
+            rollX = rollStartX;
+            transformProgress = 0;
+            isFinished = false;
+            bubble.classList.add('hidden'); 
+            
+            // 스크롤 맨 앞으로
+            wrapper.scrollLeft = 0;
 
             updateInfoPanel();
             draw();
@@ -392,14 +393,18 @@
         function drawCircumferenceMode() {
             const groundY = canvas.height * 0.7;
             const dist = rollX - rollStartX;
-            const distCm = dist / pixelsPerCm; // 스케일 적용
+            const distCm = dist / pixelsPerCm; 
             const rotation = dist / radiusPx;
             const circumferencePx = diameterCm * Math.PI * pixelsPerCm;
 
+            // 말풍선 위치 (스크롤 고려하여 DOM 위치 업데이트 필요하지만, 
+            // 현재 구조에선 wrapper가 relative고 bubble이 absolute라 canvas 기준 좌표 사용)
+            // 단, canvas가 커지면 bubble 위치도 canvas 좌표계 따름.
             if (dist > 0 && !isFinished) {
-                const canvasRect = canvas.getBoundingClientRect();
-                bubble.style.left = (canvasRect.left + rollX) + 'px';
-                bubble.style.top = (canvasRect.top + groundY - radiusPx - 15) + 'px';
+                // bubble은 wrapper 내부에 있음.
+                // canvas 내의 좌표 (rollX)를 그대로 left로 쓰면 됨.
+                bubble.style.left = rollX + 'px';
+                bubble.style.top = (groundY - radiusPx - 15) + 'px';
                 bubble.innerText = distCm.toFixed(1) + " cm";
                 bubble.classList.remove('hidden');
             } else {
@@ -414,16 +419,12 @@
             ctx.lineWidth = 2;
             ctx.stroke();
 
-            // 눈금자 (동적 간격)
-            // 화면이 좁으면 눈금 간격을 넓힘 (5cm 단위 등)
-            // pixelsPerCm가 작을수록 눈금이 촘촘해지므로 렌더링 부하 방지
-            const tickStep = pixelsPerCm < 20 ? 5 : 1; 
-
+            // 눈금자
+            const tickStep = pixelsPerCm < 25 ? 5 : 1; 
             ctx.fillStyle = "#475569";
             ctx.font = "bold 12px sans-serif";
             ctx.textAlign = "center";
             
-            // 전체 캔버스 너비에 대해 눈금 그리기 (시작점 기준)
             const maxCm = (canvas.width - rollStartX) / pixelsPerCm;
             
             for(let i=0; i <= maxCm; i += tickStep) {
@@ -435,7 +436,6 @@
                 ctx.lineWidth = 1;
                 ctx.stroke();
                 
-                // 5cm 단위 혹은 공간이 충분하면 표시
                 if (i % 5 === 0 || tickStep > 1) {
                     ctx.fillText(i, tx, groundY + 25);
                 }
@@ -486,11 +486,9 @@
 
             ctx.restore();
             
-            // 시작점 표시
             ctx.fillStyle = "#333";
             ctx.fillText("출발", rollStartX, groundY - 50);
 
-            // 완료 상태 체크
             if (dist >= circumferencePx - 1 && !isFinished) { 
                 isFinished = true;
                 updateInfoPanel(); 
@@ -519,17 +517,13 @@
                 const midAngle = startAngle + angleStep / 2;
 
                 const t = transformProgress;
-                
                 const colIndex = Math.floor(i / 2); 
                 let rectX_local = colIndex * pieceWidth;
                 if (i % 2 !== 0) {
                     rectX_local += (pieceWidth / 2);
                 }
 
-                // rectStartX는 화면의 60% 지점. 여기서 직사각형의 중심이 되도록 배치
-                // targetX = (화면상 직사각형 중심 - 화면상 원 중심) + 로컬 위치 - 직사각형 절반
                 const targetX = (rectStartX - rectCx) + rectX_local - (rectTotalWidth / 2) + (pieceWidth/2);
-                
                 const targetY = (i % 2 === 0) ? (radiusPx/2) : -(radiusPx/2);
                 const targetRot = (i % 2 === 0) ? -Math.PI/2 : Math.PI/2;
                 
@@ -547,10 +541,9 @@
                 
                 ctx.fillStyle = (i % 2 === 0) ? colors.rectRed : colors.rectBlue;
                 ctx.fill();
-                // 조각이 작아지면 선 두께도 줄임
                 if(splitCount < 64) {
                     ctx.strokeStyle = "white";
-                    ctx.lineWidth = pixelsPerCm > 20 ? 1 : 0.5;
+                    ctx.lineWidth = 1;
                     ctx.stroke();
                 }
                 
@@ -562,7 +555,6 @@
                 const rectW = Math.PI * radiusPx;
                 const finalStartX = rectStartX - (rectW/2) + (rectTotalWidth / splitCount / 2); 
                 
-                // 가로 라벨
                 const labelY = cy + radiusPx/2 + 25;
                 ctx.beginPath();
                 ctx.moveTo(finalStartX, labelY);
@@ -583,7 +575,6 @@
                 ctx.textAlign = 'center';
                 ctx.fillText("가로 = 원주 × 1/2", finalStartX + rectW/2, labelY + 15);
 
-                // 세로 라벨
                 const labelX = finalStartX + rectW + 10;
                 const topY = cy - radiusPx/2;
                 const bottomY = cy + radiusPx/2;
@@ -621,32 +612,25 @@
             for (let i = 0; i < splitCount; i++) {
                 const currentOuterR = radiusPx - (i * ringWidth); 
                 const midR = currentOuterR - (ringWidth/2);
-                
                 const stripLen = 2 * Math.PI * midR; 
                 
                 const colorVal = 100 + (i * (155/splitCount));
                 const color = `rgb(${colorVal}, ${100}, 255)`;
 
                 const t = transformProgress;
-                
-                // 목표 위치: 삼각형의 아래쪽부터 쌓임
                 const targetY = cy - (i * ringWidth) - (ringWidth/2);
-                
                 const circleCenterY = cy - radiusPx;
                 const startLegY = circleCenterY + midR;
-                
                 const curLegY = startLegY + (targetY - startLegY) * t;
 
-                // X 이동: triCx -> triCenterX
+                // X 이동: triCx -> triCenterX (고정 좌표)
                 const curX = triCx + (triCenterX - triCx) * t;
 
                 const maxAngle = 2 * Math.PI;
                 const minAngle = 0.01; 
                 const angle = maxAngle * (1 - t) + minAngle * t;
-                
                 const r_morph = stripLen / angle;
                 const sag = r_morph * (1 - Math.cos(angle / 2));
-                
                 const arcCX = curX;
                 const arcCY = curLegY - sag + r_morph;
                 
@@ -658,7 +642,6 @@
                 ctx.arc(arcCX, arcCY, r_morph, -Math.PI/2 - angle/2, -Math.PI/2 + angle/2);
                 ctx.stroke();
 
-                // 텍스트 표시
                 if (i === 0 && t > 0.9) {
                     ctx.fillStyle = "#333";
                     ctx.textAlign = "center";
@@ -759,10 +742,11 @@
             panel.innerHTML = html;
         }
 
-        // --- 이벤트 핸들러 ---
         function onPointerDown(e) {
             if(currentTab !== 'circumference') return;
             const rect = canvas.getBoundingClientRect();
+            // 스크롤 고려하여 클라이언트 좌표를 캔버스 좌표로 변환 필요 없음 (이벤트가 캔버스 위에서 발생하므로)
+            // 단, e.clientX는 뷰포트 기준이므로 rect.left를 빼야 함.
             const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
             const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
             
@@ -797,11 +781,7 @@
         }
 
         function resetPosition() {
-            // 위치 리셋은 현재 화면 비율에 맞춰서
-            const w = canvas.width;
-            rollStartX = w * 0.15;
-            rollX = rollStartX;
-            
+            calculateLayout();
             isFinished = false;
             bubble.classList.add('hidden');
             updateInfoPanel();
